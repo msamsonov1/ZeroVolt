@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZeroVolt: Deep-Discharge Regenerative Fuel Cell Membrane Hydration Monitor</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- MathJax v3 Configuration & Loader -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #03050a;
+      color: #e2e8f0;
+      overflow-x: hidden;
+    }
+    
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .formula-box {
+      background-color: #020617;
+      border: 1px solid #1e293b;
+      box-shadow: inset 0 0 15px rgba(6, 182, 212, 0.05);
+    }
+    
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #03050a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #0ea5e9;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[#03050a]">
+
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-gray-800/80 bg-gray-950/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-cyan-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <i data-lucide="zap" class="w-5 h-5 text-gray-950"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="font-bold text-lg text-white tracking-wider">ZeroVolt</span>
+            <span class="text-xs px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 font-mono-code">NASA SBIR/STTR</span>
+          </div>
+          <p class="text-xs text-gray-400">RFC Membrane Hydration & Multi-Phase Flow Monitor</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex space-x-1 sm:space-x-2 bg-gray-900/60 p-1 rounded-xl border border-gray-800">
+        <button id="tabBtnSim" onclick="switchTab('sim')" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+          <i data-lucide="activity" class="w-4 h-4"></i>
+          <span>Live Sim & HUD</span>
+        </button>
+        <button id="tabBtnPhysics" onclick="switchTab('physics')" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all text-gray-400 hover:text-gray-200">
+          <i data-lucide="microscope" class="w-4 h-4"></i>
+          <span>Core Physics</span>
+        </button>
+        <button id="tabBtnProposal" onclick="switchTab('proposal')" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all text-gray-400 hover:text-gray-200">
+          <i data-lucide="file-badge-2" class="w-4 h-4"></i>
+          <span>NASA Proposal</span>
+        </button>
+        <button id="tabBtnARR" onclick="switchTab('arr')" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all text-gray-400 hover:text-gray-200">
+          <i data-lucide="trending-up" class="w-4 h-4"></i>
+          <span>ARR & Commercial</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- ========================================================================= -->
+    <!-- TAB 1: LIVE SIMULATION & TELEMETRY HUD                                     -->
+    <!-- ========================================================================= -->
+    <div id="viewSim" class="space-y-6">
+      
+      <!-- Top Status Banner -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <p class="text-xs text-gray-400 uppercase tracking-wider font-mono-code">Hydration Regime</p>
+            <h3 id="hudStateBadge" class="text-lg font-bold text-emerald-400 flex items-center space-x-2 mt-1">
+              <span>NOMINAL STATE</span>
+            </h3>
+          </div>
+          <div id="statePulse" class="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-pulse"></div>
+        </div>
+
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
+          <p class="text-xs text-gray-400 uppercase tracking-wider font-mono-code">Membrane Resistance ($R$)</p>
+          <div class="flex items-baseline space-x-2 mt-1">
+            <span id="hudValR" class="text-2xl font-bold font-mono-code text-cyan-300">142.4</span>
+            <span class="text-xs text-gray-400 font-mono-code">mΩ·cm²</span>
+          </div>
+        </div>
+
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
+          <p class="text-xs text-gray-400 uppercase tracking-wider font-mono-code">Differential Pressure ($P$)</p>
+          <div class="flex items-baseline space-x-2 mt-1">
+            <span id="hudValP" class="text-2xl font-bold font-mono-code text-violet-300">38.2</span>
+            <span class="text-xs text-gray-400 font-mono-code">kPa</span>
+          </div>
+        </div>
+
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
+          <p class="text-xs text-gray-400 uppercase tracking-wider font-mono-code">Autonomous Backpressure</p>
+          <div class="flex items-baseline space-x-2 mt-1">
+            <span id="hudValValve" class="text-2xl font-bold font-mono-code text-amber-300">54.0</span>
+            <span class="text-xs text-gray-400 font-mono-code">% Open</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Interactive Row: Canvas + Phase-Space Chart -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Column: Cell Physics Hardware Cross-Section Canvas -->
+        <div class="lg:col-span-7 bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="layers" class="w-4 h-4 text-cyan-400"></i>
+              <h2 class="text-sm font-semibold tracking-wide uppercase font-mono-code text-gray-200">
+                PEM Micro-Transport Cross-Section
+              </h2>
+            </div>
+            <span class="text-xs text-gray-400 font-mono-code">High-Frequency Impedance (10 kHz) & Flow</span>
+          </div>
+
+          <!-- Simulation Canvas -->
+          <div class="relative w-full aspect-[16/9] bg-[#020408] rounded-xl border border-gray-950 overflow-hidden shadow-inner">
+            <canvas id="pemCanvas" class="w-full h-full block"></canvas>
+            
+            <!-- Canvas HUD Overlay Badges -->
+            <div class="absolute top-3 left-3 bg-gray-950/80 backdrop-blur border border-gray-800 px-2.5 py-1 rounded text-[11px] font-mono-code text-gray-300 space-y-0.5 pointer-events-none">
+              <div>Cathode: <span class="text-cyan-400 font-semibold">O₂ / H₂O Ex</span></div>
+              <div>Electrolyte: <span class="text-emerald-400 font-semibold">Nafion 117 (50µm)</span></div>
+              <div>Anode: <span class="text-violet-400 font-semibold">H₂ Flow Channel</span></div>
+            </div>
+
+            <div class="absolute bottom-3 right-3 bg-gray-950/80 backdrop-blur border border-gray-800 px-3 py-1.5 rounded-lg text-xs font-mono-code text-gray-300 flex items-center space-x-3 pointer-events-none">
+              <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block"></span> <span>Protons ($H^+$)</span></span>
+              <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> <span>Liquid H₂O Droplets</span></span>
+              <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-500 inline-block"></span> <span>Water Vapor</span></span>
+            </div>
+          </div>
+
+          <!-- Controls Subpanel -->
+          <div class="mt-4 pt-3 border-t border-gray-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="text-[11px] uppercase tracking-wider text-gray-400 font-mono-code block mb-1">
+                Orbital Heat Load ($T_{\text{stack}}$): <span id="labelTemp" class="text-cyan-300 font-bold">65°C</span>
+              </label>
+              <input id="sliderTemp" type="range" min="30" max="95" value="65" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+
+            <div>
+              <label class="text-[11px] uppercase tracking-wider text-gray-400 font-mono-code block mb-1">
+                Reactant Feed Stoich ($\lambda_{\text{cath}}$): <span id="labelStoich" class="text-cyan-300 font-bold">2.0x</span>
+              </label>
+              <input id="sliderStoich" type="range" min="1.1" max="4.0" step="0.1" value="2.0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+
+            <div class="flex items-end space-x-2">
+              <button id="btnAutoMode" onclick="toggleAutoController()" class="w-full py-1.5 px-3 rounded-lg text-xs font-mono-code font-semibold transition border bg-cyan-500/20 text-cyan-300 border-cyan-500/50 hover:bg-cyan-500/30">
+                Auto-Loop: ACTIVE
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Phase-Space Diagnostic Chart (R vs P) -->
+        <div class="lg:col-span-5 bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="crosshair" class="w-4 h-4 text-emerald-400"></i>
+              <h2 class="text-sm font-semibold tracking-wide uppercase font-mono-code text-gray-200">
+                Phase-Space: $R$ vs. $P$ Map
+              </h2>
+            </div>
+            <span class="text-[11px] text-gray-400 font-mono-code">State Observer Kernel</span>
+          </div>
+
+          <div class="relative w-full aspect-[4/3] bg-[#020408] rounded-xl border border-gray-950 p-2">
+            <canvas id="phaseSpaceChart"></canvas>
+          </div>
+
+          <!-- Fault Injection Quick Buttons -->
+          <div class="mt-4 pt-3 border-t border-gray-800/80">
+            <p class="text-[11px] text-gray-400 font-mono-code mb-2 uppercase">Inject Extreme Eclipse Anomalies:</p>
+            <div class="grid grid-cols-3 gap-2">
+              <button onclick="injectFault('dryout')" class="px-2 py-1.5 text-xs font-mono-code font-semibold rounded bg-amber-950/60 text-amber-300 border border-amber-800/80 hover:bg-amber-900/50 transition">
+                ⚡ Force Dry-Out
+              </button>
+              <button onclick="injectFault('flood')" class="px-2 py-1.5 text-xs font-mono-code font-semibold rounded bg-blue-950/60 text-blue-300 border border-blue-800/80 hover:bg-blue-900/50 transition">
+                🌊 Force Flooding
+              </button>
+              <button onclick="injectFault('nominal')" class="px-2 py-1.5 text-xs font-mono-code font-semibold rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/80 hover:bg-emerald-900/50 transition">
+                ✓ Restore Baseline
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Secondary Telemetry Plots Row -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Time-Series 1: High-Frequency Ionic Resistance History -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="line-chart" class="w-4 h-4 text-cyan-400"></i>
+              <h3 class="text-xs font-semibold uppercase tracking-wider font-mono-code text-gray-200">
+                Membrane Ionic Resistance Transient ($R_{\text{HFR}}$)
+              </h3>
+            </div>
+            <span class="text-xs text-gray-400 font-mono-code">Target: &lt; 160 mΩ·cm²</span>
+          </div>
+          <div class="w-full h-44">
+            <canvas id="timeSeriesR"></canvas>
+          </div>
+        </div>
+
+        <!-- Time-Series 2: Differential Pressure & Actuator Response -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="gauge" class="w-4 h-4 text-violet-400"></i>
+              <h3 class="text-xs font-semibold uppercase tracking-wider font-mono-code text-gray-200">
+                Differential Channel Pressure ($\Delta P$) & Valve Position
+              </h3>
+            </div>
+            <span class="text-xs text-gray-400 font-mono-code">Dual Axis Telemetry</span>
+          </div>
+          <div class="w-full h-44">
+            <canvas id="timeSeriesP"></canvas>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 2: CORE PHYSICS & MATHEMATICAL MODEL                                 -->
+    <!-- ========================================================================= -->
+    <div id="viewPhysics" class="hidden space-y-6">
+      
+      <div class="border-b border-gray-800 pb-4">
+        <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+          <i data-lucide="atom" class="w-5 h-5 text-cyan-400"></i>
+          <span>Multi-Phase Thermodynamics & Proton-Exchange Electrochemistry</span>
+        </h2>
+        <p class="text-sm text-gray-400 mt-1">
+          Analytical derivation of high-frequency electrochemical impedance spectroscopy (EIS) coupled with Two-Phase Darcy Law hydrodynamics in micro-gravity lunar architectures.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Card 1: Membrane Hydration & Springer's Ionic Conductivity -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-3">
+              <span class="w-6 h-6 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 flex items-center justify-center font-mono-code text-xs font-bold">01</span>
+              <h3 class="text-base font-semibold text-white">Springer-Zawodzinski Proton Transport</h3>
+            </div>
+            <p class="text-sm text-gray-300 leading-relaxed">
+              Membrane proton conductivity $\sigma_m$ in perfluorosulfonic acid (PFSA / Nafion) polymers is governed by the water content parameter $\lambda = \frac{n(\text{H}_2\text{O})}{n(\text{SO}_3^-)}$. Below $\lambda \approx 4$, percolation paths collapse, creating an exponential surge in ohmic cell resistance $R$:
+            </p>
+
+            <div class="formula-box p-3 rounded-lg text-center text-cyan-300 text-sm overflow-x-auto my-3">
+              $$\sigma_m(T, \lambda) = (0.005139\lambda - 0.00326) \cdot \exp\left[ 1268 \left( \frac{1}{303} - \frac{1}{T} \right) \right] \quad [\text{S/cm}]$$
+            </div>
+
+            <p class="text-sm text-gray-300 leading-relaxed">
+              The high-frequency intercept on the Nyquist plot ($f \sim 10\,\text{kHz}$) isolates the purely real ohmic resistance $R_{\text{HFR}} = t_m / \sigma_m$, where $t_m$ is the active membrane thickness, decoupling ionic hydration from slower charge-transfer kinetics.
+            </p>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-gray-800 text-xs text-gray-400 font-mono-code">
+            Key Threshold: Critical Dry-Out occurs when $\lambda &lt; 3.2 \implies R_{\text{HFR}} &gt; 280\text{ m}\Omega\cdot\text{cm}^2$.
+          </div>
+        </div>
+
+        <!-- Card 2: Two-Phase Darcy Flow & Porous Transport Flooding -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-3">
+              <span class="w-6 h-6 rounded bg-violet-950 text-violet-400 border border-violet-800 flex items-center justify-center font-mono-code text-xs font-bold">02</span>
+              <h3 class="text-base font-semibold text-white">Two-Phase Darcy Permeability & Droplet Drag</h3>
+            </div>
+            <p class="text-sm text-gray-300 leading-relaxed">
+              In closed-loop lunar RFC stacks without gravitational draining ($g \approx 1.62\,\text{m/s}^2$), product water liquid condensation clogs Gas Diffusion Layer (GDL) pores. The modified Darcy-Ergun pressure gradient exhibits steep non-linear pressure jumps as liquid saturation $s$ increases:
+            </p>
+
+            <div class="formula-box p-3 rounded-lg text-center text-cyan-300 text-sm overflow-x-auto my-3">
+              $$\Delta P = \frac{\mu_g \cdot L}{K_0 (1 - s)^3} \cdot v_g + \beta \rho_g v_g^2 + \sum_{k} \frac{2 \gamma \cos(\theta_c)}{r_{\text{pore}, k}}$$
+            </div>
+
+            <p class="text-sm text-gray-300 leading-relaxed">
+              Where $s$ is liquid saturation, $K_0$ is baseline permeability, and $\gamma \cos\theta_c$ quantifies the capillary barrier pressure. Liquid slug condensation drives $\Delta P$ upward even while the bulk flow velocity $v_g$ remains steady.
+            </p>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-gray-800 text-xs text-gray-400 font-mono-code">
+            Key Threshold: Flooding onset verified when $d(\Delta P)/dt &gt; 12\,\text{kPa/min}$ with nominal $R_{\text{HFR}}$.
+          </div>
+        </div>
+
+        <!-- Card 3: Phase-Space Diagnostic Inversion & Discriminant -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-3">
+              <span class="w-6 h-6 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center justify-center font-mono-code text-xs font-bold">03</span>
+              <h3 class="text-base font-semibold text-white">Observer State Inversion $(R, P)$</h3>
+            </div>
+            <p class="text-sm text-gray-300 leading-relaxed">
+              The fundamental breakthrough of ZeroVolt is decoupling state ambiguities using a vector observer in $(R, P)$ phase-space. A single state metric (e.g., cell voltage or total pressure) confuses mass-transfer degradation with membrane degradation:
+            </p>
+
+            <div class="formula-box p-3 rounded-lg text-center text-cyan-300 text-sm overflow-x-auto my-3">
+              $$\Phi(R, P) = \begin{bmatrix} \alpha_1 (R - R_{\text{nom}}) \\ \alpha_2 (P - P_{\text{nom}}) \end{bmatrix}, \quad \nabla \times \mathbf{J}_{\text{phase}} \ne 0$$
+            </div>
+
+            <p class="text-sm text-gray-300 leading-relaxed">
+              Quadrant trajectory mapping instantaneously resolves the exact failure mode:
+              <br>• Quadrant I ($+R, -P$): <strong>Membrane Dry-Out</strong> (Micro-crack hazard)
+              <br>• Quadrant II ($R_{\text{nom}}, +P$): <strong>Cathode Liquid Flooding</strong> (Reactant starvation)
+            </p>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-gray-800 text-xs text-gray-400 font-mono-code">
+            Response latency: &lt; 250 milliseconds from sensor ADC to valve command.
+          </div>
+        </div>
+
+        <!-- Card 4: Sensor & Hardware Specification -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-3">
+              <span class="w-6 h-6 rounded bg-amber-950 text-amber-400 border border-amber-800 flex items-center justify-center font-mono-code text-xs font-bold">04</span>
+              <h3 class="text-base font-semibold text-white">Rad-Hard Embedded Sensor Architecture</h3>
+            </div>
+            <p class="text-sm text-gray-300 leading-relaxed">
+              To operate across the 354-hour lunar night, ZeroVolt executes high-frequency impedance perturbation through non-invasive current collector sub-taps coupled with dual piezoresistive differential pressure transducers:
+            </p>
+
+            <div class="formula-box p-3 rounded-lg text-center text-cyan-300 text-sm overflow-x-auto my-3">
+              $$Z(\omega) = \frac{\mathcal{F}\{\tilde{v}(t)\}}{\mathcal{F}\{\tilde{i}(t)\}}\Bigg|_{\omega=2\pi \cdot 10^4\,\text{rad/s}} \implies \text{Re}[Z] \equiv R_{\text{HFR}}$$
+            </div>
+
+            <ul class="text-xs text-gray-300 space-y-1 list-disc list-inside mt-2">
+              <li><strong>Sampling Rate:</strong> 100 kHz synchronous demodulation ASIC.</li>
+              <li><strong>Radiation Tolerance:</strong> Single-Event Latchup immune up to 100 krad (Si).</li>
+              <li><strong>Thermal Tolerance:</strong> Spacecraft operational envelope: -180°C to +110°C.</li>
+            </ul>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-gray-800 text-xs text-gray-400 font-mono-code">
+            SWaP Profile: 12 Watts total draw, &lt; 450 grams per 10 kW stack module.
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 3: NASA SBIR/STTR PROPOSAL & HARDWARE TRANSITION                     -->
+    <!-- ========================================================================= -->
+    <div id="viewProposal" class="hidden space-y-6">
+      
+      <!-- Top Callout Summary -->
+      <div class="bg-gradient-to-r from-blue-950/60 to-cyan-950/40 border border-cyan-800/60 rounded-2xl p-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center space-x-2 text-cyan-400 text-xs font-mono-code uppercase font-semibold">
+              <i data-lucide="shield-check" class="w-4 h-4"></i>
+              <span>NASA STTR Solicitation 2026-I | Subtopic T6.05</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white mt-1">
+              Autonomous Closed-Loop State Observer for Deep-Discharge Regenerative Fuel Cells
+            </h2>
+            <p class="text-sm text-gray-300 mt-2 max-w-3xl">
+              A 6-Month Phase I project ($225,000) delivering a rad-hard, low-SWaP phase-space monitor to resolve membrane dry-out and liquid water flooding in lunar surface power systems.
+            </p>
+          </div>
+          <div class="bg-gray-950/90 border border-cyan-500/40 px-5 py-4 rounded-xl text-center shrink-0">
+            <span class="text-xs text-gray-400 font-mono-code block">Phase I Budget</span>
+            <span class="text-3xl font-extrabold text-cyan-300 font-mono-code">$225,000</span>
+            <span class="text-[11px] text-emerald-400 font-mono-code block mt-1">30% STTR Partnered</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Partner & Breakdown Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <!-- University Partner Allocation -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5">
+          <div class="flex items-center space-x-3 mb-3">
+            <div class="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-400">
+              <i data-lucide="graduation-cap" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white">Research Institution Subcontract</h3>
+              <p class="text-xs text-gray-400 font-mono-code">30.0% Allocation ($67,500)</p>
+            </div>
+          </div>
+          <p class="text-xs text-gray-300 leading-relaxed">
+            <strong>Partner:</strong> Center for Advanced Turbomachinery and Energy Research (CATER) at the <strong>University of Central Florida (UCF)</strong>.
+          </p>
+          <div class="mt-3 bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs text-gray-300 space-y-1">
+            <div>• Vacuum thermal cycle chamber testing (-150°C to +80°C).</div>
+            <div>• Micro-focus synchrotron X-ray imaging of liquid slug water formation.</div>
+            <div>• High-pressure closed-loop $H_2/O_2$ test skid validation.</div>
+          </div>
+        </div>
+
+        <!-- NASA Mission Relevance -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5">
+          <div class="flex items-center space-x-3 mb-3">
+            <div class="w-8 h-8 rounded-lg bg-violet-950 border border-violet-800 flex items-center justify-center text-violet-400">
+              <i data-lucide="rocket" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white">Target Lunar Architecture</h3>
+              <p class="text-xs text-gray-400 font-mono-code">Artemis Base Camp & Mars Habitats</p>
+            </div>
+          </div>
+          <p class="text-xs text-gray-300 leading-relaxed">
+            Eliminates human-in-the-loop tuning across the <strong>354-hour continuous lunar darkness cycle</strong> where fuel cells must discharge non-stop without membrane degradation.
+          </p>
+          <div class="mt-3 bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs text-gray-300 space-y-1">
+            <div>• 100 kW Lunar Surface Primary Microgrid.</div>
+            <div>• Pressurized Lunar Rover long-range sorties.</div>
+            <div>• Regenerative electrolyzer reverse-charge mode.</div>
+          </div>
+        </div>
+
+        <!-- Phase II Scale-Up -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5">
+          <div class="flex items-center space-x-3 mb-3">
+            <div class="w-8 h-8 rounded-lg bg-emerald-950 border border-emerald-800 flex items-center justify-center text-emerald-400">
+              <i data-lucide="cpu" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white">Phase II Transition Track</h3>
+              <p class="text-xs text-gray-400 font-mono-code">$850k – $1.25M Scale-Up</p>
+            </div>
+          </div>
+          <p class="text-xs text-gray-300 leading-relaxed">
+            Direct roadmap to <strong>TRL 6 Qualification</strong>: integration into NASA Glenn Research Center's closed-loop regenerative test facility.
+          </p>
+          <div class="mt-3 bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs text-gray-300 space-y-1">
+            <div>• Custom Radiation-Tolerant ASIC package design.</div>
+            <div>• Flight-ready high-speed backpressure actuator.</div>
+            <div>• Multi-cell stack (50-cell unit) autonomous testing.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 6-Month Phase I Milestones Roadmap -->
+      <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-6">
+        <h3 class="text-base font-bold text-white mb-4 flex items-center space-x-2">
+          <i data-lucide="milestone" class="w-4 h-4 text-cyan-400"></i>
+          <span>Phase I Work Breakdown Schedule (Months 1–6)</span>
+        </h3>
+
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div class="border border-gray-800 bg-gray-950 p-4 rounded-xl">
+            <div class="text-xs text-cyan-400 font-mono-code font-bold">Month 1 – 2</div>
+            <h4 class="text-sm font-semibold text-white mt-1">Impedance Kernel</h4>
+            <p class="text-xs text-gray-400 mt-2 leading-relaxed">
+              Multi-frequency calibration ($100\,\text{Hz} - 20\,\text{kHz}$) mapping ionic conductivity variations to high-temperature Nafion and hydrocarbon membranes.
+            </p>
+          </div>
+
+          <div class="border border-gray-800 bg-gray-950 p-4 rounded-xl">
+            <div class="text-xs text-cyan-400 font-mono-code font-bold">Month 3</div>
+            <h4 class="text-sm font-semibold text-white mt-1">Observer Inversion</h4>
+            <p class="text-xs text-gray-400 mt-2 leading-relaxed">
+              Formulation of the 2D $(R, P)$ vector classifier algorithm in C/C++ embedded firmware running on rad-hard ARM Cortex-M4.
+            </p>
+          </div>
+
+          <div class="border border-gray-800 bg-gray-950 p-4 rounded-xl">
+            <div class="text-xs text-cyan-400 font-mono-code font-bold">Month 4 – 5</div>
+            <h4 class="text-sm font-semibold text-white mt-1">UCF Facility Trials</h4>
+            <p class="text-xs text-gray-400 mt-2 leading-relaxed">
+              Dynamic fault injection in UCF CATER low-pressure test rig. Validation of autonomous mitigation of induced dry-out and slug flooding.
+            </p>
+          </div>
+
+          <div class="border border-gray-800 bg-gray-950 p-4 rounded-xl">
+            <div class="text-xs text-cyan-400 font-mono-code font-bold">Month 6</div>
+            <h4 class="text-sm font-semibold text-white mt-1">TRL 4 Prototype</h4>
+            <p class="text-xs text-gray-400 mt-2 leading-relaxed">
+              Final demonstration at NASA GRC. Delivery of hardware evaluation kit and Phase II flight-testing proposal package.
+            </p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 4: COMMERCIAL & NATIONWIDE ARR BREAKDOWN                             -->
+    <!-- ========================================================================= -->
+    <div id="viewARR" class="hidden space-y-6">
+      
+      <!-- Executive Summary Header -->
+      <div class="bg-gradient-to-r from-gray-950 via-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-6">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div>
+            <div class="flex items-center space-x-2 text-emerald-400 text-xs font-mono-code uppercase font-semibold">
+              <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i>
+              <span>Civil Clean Energy & Critical Infrastructure Market Analysis</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white mt-1">
+              $218.4M Mature Civil Software & Licensing ARR
+            </h2>
+            <p class="text-sm text-gray-300 mt-2 max-w-3xl">
+              Transferring NASA deep-discharge lunar fuel cell observer technology to civilian hydrogen stationary storage, maritime cargo fleets, data centers, and heavy decarbonization.
+            </p>
+          </div>
+          
+          <div class="flex items-center space-x-4 bg-gray-950/80 p-4 rounded-xl border border-gray-800">
+            <div>
+              <span class="text-xs text-gray-400 font-mono-code uppercase block">Enterprise Valuation (10x SaaS)</span>
+              <span class="text-2xl font-extrabold text-cyan-300 font-mono-code">$2.18 Billion</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARR Distribution Table -->
+      <div class="bg-gray-900/40 border border-gray-800 rounded-2xl overflow-hidden">
+        <div class="p-4 border-b border-gray-800 flex items-center justify-between">
+          <h3 class="text-sm font-bold text-white uppercase tracking-wider font-mono-code">
+            Commercial Vertical Monetization Engine
+          </h3>
+          <span class="text-xs text-cyan-400 font-mono-code">Annual Recurring Runtime License Model</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono-code text-gray-300">
+            <thead class="bg-gray-950/80 text-gray-400 border-b border-gray-800">
+              <tr>
+                <th class="py-3 px-4">Market Vertical</th>
+                <th class="py-3 px-4">Target Application</th>
+                <th class="py-3 px-4">Pricing Model</th>
+                <th class="py-3 px-4">Addressable Fleet</th>
+                <th class="py-3 px-4 text-right">Target ARR</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-800/60">
+              <tr class="hover:bg-gray-800/30">
+                <td class="py-3 px-4 font-semibold text-white">Hyperscale Data Center Backup</td>
+                <td class="py-3 px-4 text-gray-400">Zero-emission H₂ generator replacement for diesel</td>
+                <td class="py-3 px-4">$12,000 / MW / year</td>
+                <td class="py-3 px-4">4,500 MW deployed</td>
+                <td class="py-3 px-4 text-right text-emerald-400 font-bold">$54.0M</td>
+              </tr>
+              <tr class="hover:bg-gray-800/30">
+                <td class="py-3 px-4 font-semibold text-white">Commercial Maritime Freight</td>
+                <td class="py-3 px-4 text-gray-400">Transoceanic liquid H₂ container vessel power</td>
+                <td class="py-3 px-4">$45,000 / ship license / yr</td>
+                <td class="py-3 px-4">1,100 Cargo Vessels</td>
+                <td class="py-3 px-4 text-right text-emerald-400 font-bold">$49.5M</td>
+              </tr>
+              <tr class="hover:bg-gray-800/30">
+                <td class="py-3 px-4 font-semibold text-white">Utility Microgrid Long-Duration</td>
+                <td class="py-3 px-4 text-gray-400">Seasonal 100+ hour renewable energy shifting</td>
+                <td class="py-3 px-4">$7,500 / stack system / yr</td>
+                <td class="py-3 px-4">6,400 Microgrid Nodes</td>
+                <td class="py-3 px-4 text-right text-emerald-400 font-bold">$48.0M</td>
+              </tr>
+              <tr class="hover:bg-gray-800/30">
+                <td class="py-3 px-4 font-semibold text-white">Class-8 Heavy Duty Logistics</td>
+                <td class="py-3 px-4 text-gray-400">Long-haul freight fuel cell durability guarantee</td>
+                <td class="py-3 px-4">$950 / truck runtime SaaS</td>
+                <td class="py-3 px-4">38,000 Long-Haul Trucks</td>
+                <td class="py-3 px-4 text-right text-emerald-400 font-bold">$36.1M</td>
+              </tr>
+              <tr class="hover:bg-gray-800/30">
+                <td class="py-3 px-4 font-semibold text-white">Clean Hydrogen Electrolyzers</td>
+                <td class="py-3 px-4 text-gray-400">Electrolysis membrane degradation telemetry</td>
+                <td class="py-3 px-4">$8,200 / 5 MW stack array / yr</td>
+                <td class="py-3 px-4">2,600 Global Arrays</td>
+                <td class="py-3 px-4 text-right text-emerald-400 font-bold">$21.3M</td>
+              </tr>
+              <tr class="hover:bg-gray-800/30">
+                <td class="py-3 px-4 font-semibold text-white">Artemis Commercial Payload Vendors</td>
+                <td class="py-3 px-4 text-gray-400">Lunar lander & robotic mining rover battery replacement</td>
+                <td class="py-3 px-4">$150,000 / lander suite</td>
+                <td class="py-3 px-4">63 Commercial Landers</td>
+                <td class="py-3 px-4 text-right text-emerald-400 font-bold">$9.5M</td>
+              </tr>
+            </tbody>
+            <tfoot class="bg-gray-950 font-bold text-white border-t border-gray-700">
+              <tr>
+                <td colspan="4" class="py-3 px-4 uppercase text-gray-400">Total Mature Annual Recurring Revenue</td>
+                <td class="py-3 px-4 text-right text-cyan-300 text-sm">$218.4M</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      <!-- Detailed Vertical Breakdown Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+        <!-- Card 1 -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-2">
+              <i data-lucide="server" class="w-4 h-4 text-cyan-400"></i>
+              <h4 class="text-sm font-bold text-white">Hyperscale Data Center Backup</h4>
+            </div>
+            <p class="text-xs text-cyan-300 font-mono-code mb-2">
+              <strong>Physics:</strong> Cold standby fuel cell start-up creates thermal gradients that shock membrane hydration within 45 seconds.
+            </p>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Why Legacy Missed This:</strong> Incumbents run static reactant feeds based on lookup tables, which causes catastrophic flooding during rapid emergency load ramps.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] font-mono-code text-gray-400">
+            Target ARR: $54.0M | 4,500 MW Market
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-2">
+              <i data-lucide="ship" class="w-4 h-4 text-violet-400"></i>
+              <h4 class="text-sm font-bold text-white">Commercial Maritime Freight</h4>
+            </div>
+            <p class="text-xs text-cyan-300 font-mono-code mb-2">
+              <strong>Physics:</strong> Wave roll and ocean heave induce dynamic gravity fluctuations, destabilizing gas-liquid pore capillarity.
+            </p>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Why Legacy Missed This:</strong> Competitors use standard land-based industrial fuel cells with gravity-dependent sumps that fail in sea state 5+.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] font-mono-code text-gray-400">
+            Target ARR: $49.5M | 1,100 Vessels
+          </div>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-2">
+              <i data-lucide="sun-medium" class="w-4 h-4 text-emerald-400"></i>
+              <h4 class="text-sm font-bold text-white">Utility Microgrid Long-Duration</h4>
+            </div>
+            <p class="text-xs text-cyan-300 font-mono-code mb-2">
+              <strong>Physics:</strong> 100+ hour multi-day energy storage requires switching between electrolyzer and fuel cell modes without membrane dry-out.
+            </p>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Why Legacy Missed This:</strong> Operators rely on expensive manual flushing cycles, wasting 8–14% of stored hydrogen fuel per cycle.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] font-mono-code text-gray-400">
+            Target ARR: $48.0M | 6,400 Microgrid Stacks
+          </div>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-2">
+              <i data-lucide="truck" class="w-4 h-4 text-amber-400"></i>
+              <h4 class="text-sm font-bold text-white">Class-8 Heavy Duty Logistics</h4>
+            </div>
+            <p class="text-xs text-cyan-300 font-mono-code mb-2">
+              <strong>Physics:</strong> Severe freeway vibration shakes liquid droplets free from GDL walls, spiking localized internal pressure differentials.
+            </p>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Why Legacy Missed This:</strong> Fleet telematics monitor simple average cell voltages, catching failures only after membrane pinhole perforation.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] font-mono-code text-gray-400">
+            Target ARR: $36.1M | 38,000 Heavy Trucks
+          </div>
+        </div>
+
+        <!-- Card 5 -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-2">
+              <i data-lucide="wind" class="w-4 h-4 text-blue-400"></i>
+              <h4 class="text-sm font-bold text-white">Clean Hydrogen Electrolyzers</h4>
+            </div>
+            <p class="text-xs text-cyan-300 font-mono-code mb-2">
+              <strong>Physics:</strong> High-pressure oxygen crossover across degraded polymers produces micro-hotspots and accelerated chemical thinning.
+            </p>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Why Legacy Missed This:</strong> Producers conduct scheduled annual shutdowns for manual membrane resistance sampling instead of live online mapping.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] font-mono-code text-gray-400">
+            Target ARR: $21.3M | 2,600 Global Arrays
+          </div>
+        </div>
+
+        <!-- Card 6 -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-2">
+              <i data-lucide="orbit" class="w-4 h-4 text-purple-400"></i>
+              <h4 class="text-sm font-bold text-white">Commercial Lunar Payload Services</h4>
+            </div>
+            <p class="text-xs text-cyan-300 font-mono-code mb-2">
+              <strong>Physics:</strong> In 1/6th gravity, surface tension completely dominates liquid expulsion, making traditional capillary wick designs unreliable.
+            </p>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Why Legacy Missed This:</strong> Landers defaulted to non-rechargeable primary batteries or RTGs that are cost-prohibitive for commercial payload ventures.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] font-mono-code text-gray-400">
+            Target ARR: $9.5M | 63 Commercial Landers
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Call to Action Banner -->
+      <div class="bg-gray-950 border border-gray-800 rounded-2xl p-6 text-center space-y-3">
+        <h3 class="text-lg font-bold text-white">Direct Technical & Commercial Engagement</h3>
+        <p class="text-xs text-gray-400 max-w-xl mx-auto">
+          Inquiries regarding flight testing payloads, technology licensing, and university cooperative research under NASA SBIR/STTR Topic T6.05:
+        </p>
+        <div class="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-cyan-950/60 border border-cyan-800 text-cyan-300 font-mono-code text-sm">
+          <i data-lucide="mail" class="w-4 h-4"></i>
+          <span>support@rfwavecode.com</span>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- JAVASCRIPT ENGINE & ARCHITECTURAL LOGIC                                  -->
+  <!-- ========================================================================= -->
+  <script>
+    // -------------------------------------------------------------------------
+    // 1. Tab Switching Architecture (Preventing DOM or MathJax failures)
+    // -------------------------------------------------------------------------
+    const tabMapping = {
+      'sim': { viewId: 'viewSim', btnId: 'tabBtnSim' },
+      'physics': { viewId: 'viewPhysics', btnId: 'tabBtnPhysics' },
+      'proposal': { viewId: 'viewProposal', btnId: 'tabBtnProposal' },
+      'arr': { viewId: 'viewARR', btnId: 'tabBtnARR' }
+    };
+
+    function switchTab(targetKey) {
+      Object.keys(tabMapping).forEach(key => {
+        const item = tabMapping[key];
+        const viewEl = document.getElementById(item.viewId);
+        const btnEl = document.getElementById(item.btnId);
+
+        if (key === targetKey) {
+          viewEl.classList.remove('hidden');
+          btnEl.className = 'flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-cyan-500/10 text-cyan-300 border border-cyan-500/30';
+        } else {
+          viewEl.classList.add('hidden');
+          btnEl.className = 'flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all text-gray-400 hover:text-gray-200';
+        }
+      });
+
+      // Retrigger icons for freshly exposed elements
+      if (window.lucide) {
+        lucide.createIcons();
+      }
+
+      // Render math equations on tab appearance
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise();
+      }
+
+      // Re-trigger layout checks for canvas and charts
+      if (targetKey === 'sim') {
+        resizeCanvas();
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. Physical State Variables & Observer State Space
+    // -------------------------------------------------------------------------
+    const state = {
+      // Physical dynamic telemetry
+      R: 142.4,          // High frequency resistance in mΩ·cm² (Nominal ~ 120-160)
+      P: 38.2,           // Differential stack pressure in kPa (Nominal ~ 30-45)
+      targetR: 142.4,
+      targetP: 38.2,
+      temp: 65,          // °C
+      stoich: 2.0,       // Reactant stoichiometry
+      valvePos: 54.0,    // Backpressure valve % open
+      autoMode: true,    // Autonomous control active
+      regime: 'NOMINAL', // 'NOMINAL', 'DRYOUT', 'FLOODED'
+      
+      // Canvas particle states
+      protons: [],
+      droplets: [],
+      vapors: [],
+      
+      // Time-series history buffers (last 30 ticks)
+      historyLabels: Array.from({length: 30}, (_, i) => `-${30 - i}s`),
+      historyR: Array(30).fill(142.4),
+      historyP: Array(30).fill(38.2),
+      historyValve: Array(30).fill(54.0),
+      
+      // Trajectory trace on phase-space
+      trajectory: []
+    };
+
+    // Pre-populate trajectory
+    for (let i = 0; i < 15; i++) {
+      state.trajectory.push({
+        x: 140 + (Math.random() - 0.5) * 6,
+        y: 38 + (Math.random() - 0.5) * 4
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. Chart.js Setup (Phase-Space & Telemetry)
+    // -------------------------------------------------------------------------
+    let phaseSpaceChart = null;
+    let timeSeriesRChart = null;
+    let timeSeriesPChart = null;
+
+    function initCharts() {
+      // 1. Phase-Space Chart ($R$ on X vs $P$ on Y)
+      const ctxPhase = document.getElementById('phaseSpaceChart').getContext('2d');
+      phaseSpaceChart = new Chart(ctxPhase, {
+        type: 'scatter',
+        data: {
+          datasets: [
+            // Safe Operating Nominal Corridor
+            {
+              label: 'Safe Operating Envelope',
+              data: [
+                {x: 100, y: 25}, {x: 180, y: 25}, {x: 180, y: 55}, {x: 100, y: 55}, {x: 100, y: 25}
+              ],
+              showLine: true,
+              borderColor: 'rgba(16, 185, 129, 0.6)',
+              borderWidth: 2,
+              borderDash: [4, 4],
+              backgroundColor: 'rgba(16, 185, 129, 0.06)',
+              pointRadius: 0,
+              fill: true
+            },
+            // Historical Trajectory
+            {
+              label: 'State Trajectory History',
+              data: state.trajectory.slice(0, -1),
+              borderColor: 'rgba(6, 182, 212, 0.35)',
+              showLine: true,
+              borderWidth: 1.5,
+              pointRadius: 3,
+              pointBackgroundColor: 'rgba(6, 182, 212, 0.5)'
+            },
+            // Active Real-time Head
+            {
+              label: 'Active Operating Point',
+              data: [state.trajectory[state.trajectory.length - 1]],
+              borderColor: '#ffffff',
+              borderWidth: 2,
+              pointRadius: 7,
+              pointBackgroundColor: '#06b6d4'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: {
+            x: {
+              type: 'linear',
+              position: 'bottom',
+              min: 60,
+              max: 360,
+              title: {
+                display: true,
+                text: 'Membrane Ionic Resistance R (mΩ·cm²)',
+                color: '#94a3b8',
+                font: { family: 'JetBrains Mono', size: 11 }
+              },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            y: {
+              type: 'linear',
+              min: 10,
+              max: 90,
+              title: {
+                display: true,
+                text: 'Differential Pressure ΔP (kPa)',
+                color: '#94a3b8',
+                font: { family: 'JetBrains Mono', size: 11 }
+              },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: {
+                color: '#94a3b8',
+                font: { family: 'JetBrains Mono', size: 10 },
+                boxWidth: 12
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `R: ${ctx.parsed.x.toFixed(1)} mΩ·cm², P: ${ctx.parsed.y.toFixed(1)} kPa`
+              }
+            }
+          }
+        }
+      });
+
+      // 2. Resistance Time Series
+      const ctxR = document.getElementById('timeSeriesR').getContext('2d');
+      timeSeriesRChart = new Chart(ctxR, {
+        type: 'line',
+        data: {
+          labels: state.historyLabels,
+          datasets: [{
+            label: 'Resistance R (mΩ·cm²)',
+            data: state.historyR,
+            borderColor: '#06b6d4',
+            backgroundColor: 'rgba(6, 182, 212, 0.08)',
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { display: false }
+            },
+            y: {
+              min: 80,
+              max: 340,
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 9 } }
+            }
+          },
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+
+      // 3. Pressure & Valve Position Time Series
+      const ctxP = document.getElementById('timeSeriesP').getContext('2d');
+      timeSeriesPChart = new Chart(ctxP, {
+        type: 'line',
+        data: {
+          labels: state.historyLabels,
+          datasets: [
+            {
+              label: 'Pressure ΔP (kPa)',
+              data: state.historyP,
+              borderColor: '#a78bfa',
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.3,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Valve % Open',
+              data: state.historyValve,
+              borderColor: '#f59e0b',
+              borderWidth: 1.5,
+              borderDash: [3, 3],
+              pointRadius: 0,
+              tension: 0.3,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { display: false }
+            },
+            y: {
+              type: 'linear',
+              position: 'left',
+              min: 15,
+              max: 85,
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#a78bfa', font: { family: 'JetBrains Mono', size: 9 } }
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              min: 0,
+              max: 100,
+              grid: { display: false },
+              ticks: { color: '#f59e0b', font: { family: 'JetBrains Mono', size: 9 } }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 9 }, boxWidth: 10 }
+            }
+          }
+        }
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. HTML5 Canvas Animation: Micro-Transport Physics
+    // -------------------------------------------------------------------------
+    const canvas = document.getElementById('pemCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const w = rect.width || 600;
+      const h = rect.height || 338;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.resetTransform();
+      ctx.scale(dpr, dpr);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    // Initialize Canvas Particle Engine
+    function initParticles() {
+      state.protons = [];
+      state.droplets = [];
+      state.vapors = [];
+
+      // Protons migrating across membrane
+      for (let i = 0; i < 40; i++) {
+        state.protons.push({
+          x: 0.35 + Math.random() * 0.3,
+          y: Math.random(),
+          speed: 0.002 + Math.random() * 0.003,
+          size: 2.2 + Math.random() * 1.5
+        });
+      }
+
+      // Cathode liquid droplets and vapor
+      for (let i = 0; i < 20; i++) {
+        state.droplets.push({
+          x: 0.65 + Math.random() * 0.32,
+          y: Math.random(),
+          vx: (Math.random() - 0.3) * 0.001,
+          vy: 0.0015 + Math.random() * 0.002,
+          radius: 3 + Math.random() * 5,
+          clogged: false
+        });
+      }
+
+      for (let i = 0; i < 35; i++) {
+        state.vapors.push({
+          x: 0.66 + Math.random() * 0.32,
+          y: Math.random(),
+          speed: 0.003 + Math.random() * 0.004,
+          radius: 1.5 + Math.random() * 1.5,
+          opacity: 0.2 + Math.random() * 0.4
+        });
+      }
+    }
+
+    // Draw the microscopic membrane and flow channels
+    function renderCanvas() {
+      const w = canvas.getBoundingClientRect().width || 600;
+      const h = canvas.getBoundingClientRect().height || 338;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Boundaries
+      const anodeW = w * 0.33;
+      const membW = w * 0.34;
+      const cathW = w * 0.33;
+
+      // 1. Anode Gas Channel (Left)
+      const gradAnode = ctx.createLinearGradient(0, 0, anodeW, 0);
+      gradAnode.addColorStop(0, '#0a0d17');
+      gradAnode.addColorStop(1, '#0e172a');
+      ctx.fillStyle = gradAnode;
+      ctx.fillRect(0, 0, anodeW, h);
+
+      // 2. Polymer Electrolyte Membrane (Center - Nafion)
+      const membGrad = ctx.createLinearGradient(anodeW, 0, anodeW + membW, 0);
+      if (state.regime === 'DRYOUT') {
+        membGrad.addColorStop(0, '#451a03');
+        membGrad.addColorStop(0.5, '#78350f');
+        membGrad.addColorStop(1, '#451a03');
+      } else {
+        membGrad.addColorStop(0, '#042f2e');
+        membGrad.addColorStop(0.5, '#064e3b');
+        membGrad.addColorStop(1, '#042f2e');
+      }
+      ctx.fillStyle = membGrad;
+      ctx.fillRect(anodeW, 0, membW, h);
+
+      // Draw Membrane Polymer Backbone fibrils (Visualizing hydration channels)
+      ctx.strokeStyle = state.regime === 'DRYOUT' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(52, 211, 153, 0.25)';
+      ctx.lineWidth = 1;
+      for (let y = 15; y < h; y += 25) {
+        ctx.beginPath();
+        ctx.moveTo(anodeW, y);
+        ctx.bezierCurveTo(anodeW + membW * 0.3, y - 8, anodeW + membW * 0.7, y + 8, anodeW + membW, y);
+        ctx.stroke();
+      }
+
+      // 3. Cathode Water Channel (Right)
+      const gradCath = ctx.createLinearGradient(anodeW + membW, 0, w, 0);
+      gradCath.addColorStop(0, '#0f172a');
+      gradCath.addColorStop(1, state.regime === 'FLOODED' ? '#082f49' : '#070d19');
+      ctx.fillStyle = gradCath;
+      ctx.fillRect(anodeW + membW, 0, cathW, h);
+
+      // Channel separators (Porous Gas Diffusion Layers)
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(anodeW, 0, 0, h);
+      ctx.strokeRect(anodeW + membW, 0, 0, h);
+
+      // Labels on Canvas Header
+      ctx.font = '10px JetBrains Mono';
+      ctx.fillStyle = '#64748b';
+      ctx.fillText('ANODE [H₂ IN]', 15, 20);
+      ctx.fillText('NAFION MEMBRANE (λ-HYDRATION)', anodeW + 15, 20);
+      ctx.fillText('CATHODE [O₂ / H₂O EXHAUST]', anodeW + membW + 15, 20);
+
+      // Render Protons (Migrating left to right across membrane)
+      const protonSpeedMultiplier = state.regime === 'DRYOUT' ? 0.2 : 1.0;
+      state.protons.forEach(p => {
+        p.x += p.speed * protonSpeedMultiplier;
+        if (p.x > 0.67) p.x = 0.34;
+
+        const px = p.x * w;
+        const py = p.y * h;
+
+        ctx.beginPath();
+        ctx.arc(px, py, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = state.regime === 'DRYOUT' ? '#f59e0b' : '#22d3ee';
+        ctx.shadowColor = state.regime === 'DRYOUT' ? '#f59e0b' : '#06b6d4';
+        ctx.shadowBlur = 6;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      });
+
+      // Render Vapor Particles in Cathode
+      state.vapors.forEach(v => {
+        v.y += v.speed;
+        if (v.y > 1) v.y = 0;
+
+        ctx.beginPath();
+        ctx.arc(v.x * w, v.y * h, v.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(148, 163, 184, ${v.opacity})`;
+        ctx.fill();
+      });
+
+      // Render Liquid Water Droplets in Cathode Channel
+      const numDropletsToDraw = state.regime === 'FLOODED' ? state.droplets.length : (state.regime === 'DRYOUT' ? 3 : 9);
+      for (let i = 0; i < numDropletsToDraw; i++) {
+        const d = state.droplets[i];
+        
+        // If flooded, droplets grow and aggregate
+        const currentRadius = state.regime === 'FLOODED' ? d.radius * 2.2 : d.radius;
+        d.y += d.vy * (state.regime === 'FLOODED' ? 0.3 : 1.0);
+        if (d.y > 1) d.y = 0;
+
+        const dx = d.x * w;
+        const dy = d.y * h;
+
+        ctx.beginPath();
+        ctx.arc(dx, dy, currentRadius, 0, Math.PI * 2);
+        ctx.fillStyle = state.regime === 'FLOODED' ? 'rgba(56, 189, 248, 0.85)' : 'rgba(14, 165, 233, 0.45)';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.fill();
+        ctx.stroke();
+
+        // Highlight glint
+        ctx.beginPath();
+        ctx.arc(dx - currentRadius * 0.3, dy - currentRadius * 0.3, currentRadius * 0.25, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fill();
+      }
+
+      // Draw Autonomous Backpressure Valve Indicator on Right Exhaust
+      const valveHeight = (1 - (state.valvePos / 100)) * (h * 0.35);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(w - 12, (h * 0.5) - valveHeight, 8, valveHeight * 2);
+      ctx.strokeStyle = '#d97706';
+      ctx.strokeRect(w - 14, h * 0.15, 12, h * 0.7);
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. Dynamic Physics Update Loop & Autonomous Controller
+    // -------------------------------------------------------------------------
+    function stepPhysics() {
+      // 1. Calculate target state values from inputs and simulated orbital disturbances
+      if (state.regime === 'DRYOUT') {
+        state.targetR = 295.0 + (state.temp - 65) * 1.8;
+        state.targetP = 22.0 - (state.stoich - 2.0) * 2.0;
+      } else if (state.regime === 'FLOODED') {
+        state.targetR = 135.0 - (state.temp - 65) * 0.5;
+        state.targetP = 68.0 + (state.stoich - 2.0) * 8.5;
+      } else {
+        // Nominal Equilibrium
+        state.targetR = 140.0 + (state.temp - 65) * 0.8;
+        state.targetP = 38.0 + (state.stoich - 2.0) * 4.0;
+      }
+
+      // 2. Closed-Loop Autonomous Observer & Valve Actuator
+      if (state.autoMode) {
+        if (state.R > 210) {
+          // Dry-out detected: Throttling backpressure valve to restrict purge and retain product water
+          state.valvePos = Math.max(15, state.valvePos - 2.5);
+          // Counteract dry-out gradually
+          state.targetR -= 4.0;
+          if (state.targetR <= 170) {
+            state.regime = 'NOMINAL';
+          }
+        } else if (state.P > 52) {
+          // Liquid flooding detected: Opening valve fully to blow down liquid droplet clogs
+          state.valvePos = Math.min(95, state.valvePos + 4.0);
+          state.targetP -= 2.8;
+          if (state.targetP <= 44) {
+            state.regime = 'NOMINAL';
+          }
+        } else {
+          // Modulate valve gently toward nominal 54%
+          state.valvePos += (54.0 - state.valvePos) * 0.08;
+        }
+      }
+
+      // Smooth relaxation
+      state.R += (state.targetR - state.R) * 0.08 + (Math.random() - 0.5) * 0.6;
+      state.P += (state.targetP - state.P) * 0.08 + (Math.random() - 0.5) * 0.4;
+
+      // 3. Update HUD DOM Badges
+      document.getElementById('hudValR').innerText = state.R.toFixed(1);
+      document.getElementById('hudValP').innerText = state.P.toFixed(1);
+      document.getElementById('hudValValve').innerText = state.valvePos.toFixed(1);
+
+      const badge = document.getElementById('hudStateBadge');
+      const pulse = document.getElementById('statePulse');
+
+      if (state.R > 220) {
+        badge.innerHTML = `<span class="text-amber-400">CRITICAL DRY-OUT</span>`;
+        pulse.className = 'w-3.5 h-3.5 rounded-full bg-amber-400 animate-ping';
+      } else if (state.P > 50) {
+        badge.innerHTML = `<span class="text-blue-400">CATHODE FLOODING</span>`;
+        pulse.className = 'w-3.5 h-3.5 rounded-full bg-blue-400 animate-ping';
+      } else {
+        badge.innerHTML = `<span class="text-emerald-400">NOMINAL CORRIDOR</span>`;
+        pulse.className = 'w-3.5 h-3.5 rounded-full bg-emerald-400 animate-pulse';
+      }
+
+      // 4. Update Trajectory Buffer
+      state.trajectory.push({ x: state.R, y: state.P });
+      if (state.trajectory.length > 25) {
+        state.trajectory.shift();
+      }
+
+      // 5. Update Time Series Buffers
+      state.historyR.push(state.R);
+      state.historyR.shift();
+      state.historyP.push(state.P);
+      state.historyP.shift();
+      state.historyValve.push(state.valvePos);
+      state.historyValve.shift();
+    }
+
+    // Chart telemetry update tick (throttled to avoid frame drops)
+    function updateCharts() {
+      if (phaseSpaceChart && timeSeriesRChart && timeSeriesPChart) {
+        // Phase-Space
+        phaseSpaceChart.data.datasets[1].data = state.trajectory.slice(0, -1);
+        phaseSpaceChart.data.datasets[2].data = [state.trajectory[state.trajectory.length - 1]];
+        phaseSpaceChart.update('none');
+
+        // Resistance
+        timeSeriesRChart.data.datasets[0].data = state.historyR;
+        timeSeriesRChart.update('none');
+
+        // Pressure & Valve
+        timeSeriesPChart.data.datasets[0].data = state.historyP;
+        timeSeriesPChart.data.datasets[1].data = state.historyValve;
+        timeSeriesPChart.update('none');
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. User Control Handlers & Fault Injections
+    // -------------------------------------------------------------------------
+    function injectFault(faultType) {
+      if (faultType === 'dryout') {
+        state.regime = 'DRYOUT';
+        state.targetR = 310;
+        state.targetP = 18;
+      } else if (faultType === 'flood') {
+        state.regime = 'FLOODED';
+        state.targetR = 130;
+        state.targetP = 78;
+      } else {
+        state.regime = 'NOMINAL';
+        state.targetR = 142.4;
+        state.targetP = 38.2;
+      }
+    }
+
+    function toggleAutoController() {
+      state.autoMode = !state.autoMode;
+      const btn = document.getElementById('btnAutoMode');
+      if (state.autoMode) {
+        btn.innerText = 'Auto-Loop: ACTIVE';
+        btn.className = 'w-full py-1.5 px-3 rounded-lg text-xs font-mono-code font-semibold transition border bg-cyan-500/20 text-cyan-300 border-cyan-500/50 hover:bg-cyan-500/30';
+      } else {
+        btn.innerText = 'Auto-Loop: MANUAL';
+        btn.className = 'w-full py-1.5 px-3 rounded-lg text-xs font-mono-code font-semibold transition border bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700';
+      }
+    }
+
+    // Sliders
+    document.getElementById('sliderTemp').addEventListener('input', (e) => {
+      state.temp = parseFloat(e.target.value);
+      document.getElementById('labelTemp').innerText = `${state.temp}°C`;
+    });
+
+    document.getElementById('sliderStoich').addEventListener('input', (e) => {
+      state.stoich = parseFloat(e.target.value);
+      document.getElementById('labelStoich').innerText = `${state.stoich.toFixed(1)}x`;
+    });
+
+    // -------------------------------------------------------------------------
+    // 7. Master Initialization & Animation Loop
+    // -------------------------------------------------------------------------
+    let tickCount = 0;
+
+    function mainAnimationLoop() {
+      stepPhysics();
+      renderCanvas();
+
+      tickCount++;
+      if (tickCount % 4 === 0) {
+        updateCharts();
+      }
+
+      requestAnimationFrame(mainAnimationLoop);
+    }
+
+    window.onload = function () {
+      if (window.lucide) {
+        lucide.createIcons();
+      }
+      resizeCanvas();
+      initParticles();
+      initCharts();
+      
+      // Start loop on load
+      requestAnimationFrame(mainAnimationLoop);
+    };
+  </script>
+</body>
+</html>
